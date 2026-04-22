@@ -43,7 +43,7 @@ class GC9A01 {
     digitalWrite(dc_, HIGH);
     digitalWrite(cs_, LOW);
     spi_.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
-    spi_.transfer((const uint8_t*)pixels, count * 2);
+    spi_.transfer((uint8_t*)pixels, count * 2);
     spi_.endTransaction();
     digitalWrite(cs_, HIGH);
   }

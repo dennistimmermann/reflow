@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 namespace control {
 
@@ -18,5 +19,3 @@ bool  safety_ok();
 void  safety_ack();         // user acknowledges fault via UI
 
 }  // namespace control
-
-#include <stdint.h>

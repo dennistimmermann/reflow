@@ -2,6 +2,7 @@
 #include "heater_control.hpp"
 #include "../sensors/thermocouples.hpp"
 #include "../sensors/ntc.hpp"
+#include <initializer_list>
 
 namespace control {
 
