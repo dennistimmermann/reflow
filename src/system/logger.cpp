@@ -1,17 +1,16 @@
 #include "logger.hpp"
+#include "system/tud_serial.hpp"
 #include <cstdarg>
 #include <cstdio>
 
 namespace sys {
 
-// Minimal stub: forwards to Serial (USB CDC). A ring-buffered non-blocking
-// drain will replace this once USB enumeration is verified on hardware.
-void logger_init() {
-  Serial.begin(115200);
-}
+// USB / CDC setup lives in main.cpp (usb_bsp_init + tusb_init). Nothing to
+// do here; kept as a no-op so the scheduler hook stays symmetric.
+void logger_init() {}
 
 void logger_drain() {
-  // no-op for now; Serial.print is already non-blocking with the CDC core.
+  // no-op for now; Serial.write pushes into TinyUSB's CDC ring without blocking.
 }
 
 static void emit(const char* prefix, const char* fmt, va_list ap) {

@@ -7,6 +7,10 @@
     "framework_extra_flags": {
       "arduino": "-D__CORTEX_SC=0"
     },
+    "hwids": [
+      ["0x0483", "0x5740"],
+      ["0x0483", "0xDF11"]
+    ],
     "mcu": "stm32g0b1cet6",
     "product_line": "STM32G0B1xx",
     "variant": "reflow_oven"

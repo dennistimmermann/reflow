@@ -1,7 +1,11 @@
 #include <Arduino.h>
+#include <tusb.h>
+#include "system/tud_serial.hpp"
 #include "system/dfu.hpp"
 #include <Buzzer.hpp>
 #include "sensors/mcu_temp.hpp"
+
+extern "C" void usb_bsp_init(void);
 
 static driver::Buzzer buzzer(PIN_BUZZER);
 
@@ -18,7 +22,11 @@ static constexpr uint8_t kNumMelodies = sizeof(kMelodies) / sizeof(kMelodies[0])
 static uint8_t melody_idx = 0;
 
 void setup() {
-    Serial.begin(115200);
+    usb_bsp_init();
+    tud_init(BOARD_TUD_RHPORT);   // tusb_init() is a no-op without the legacy
+                                  // CFG_TUSB_RHPORTx_MODE macros — call the
+                                  // device-stack init directly.
+
     analogReadResolution(12);
     pinMode(PIN_USER_LED, OUTPUT);
     pinMode(PIN_FET_0, OUTPUT);
@@ -28,8 +36,7 @@ void setup() {
 }
 
 void loop() {
-    if (sys::dfu_requested()) sys::enter_dfu();
-
+    tud_task();        // service USB every iteration — CDC + DFU runtime
     buzzer.update();
 
     // Rising-edge detection with 30 ms debounce
