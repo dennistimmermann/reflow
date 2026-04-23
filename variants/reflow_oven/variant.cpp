@@ -78,17 +78,49 @@ bool boot0_pin_enabled() {
 }
 
 void enable_boot0_pin() {
-  HAL_FLASH_Unlock();
-  HAL_FLASH_OB_Unlock();
-  FLASH_OBProgramInitTypeDef ob = {};
-  ob.OptionType = OPTIONBYTE_USER;
-  ob.USERType   = OB_USER_nBOOT_SEL;
-  ob.USERConfig = OB_BOOT0_FROM_PIN;  // clears nBOOT_SEL to 0 → BOOT0 from PA14 pin
-  HAL_FLASHEx_OBProgram(&ob);
-  HAL_FLASH_OB_Launch();              // triggers system reset; does not return
+  // HAL_FLASHEx_OBProgram silently fails on STM32G0 because it doesn't wait
+  // for BSY1 before setting OPTSTRT. Use direct register writes per RM0444 §3.4.2.
+  FLASH->KEYR   = 0x45670123U;  // unlock FLASH->CR
+  FLASH->KEYR   = 0xCDEF89ABU;
+  FLASH->OPTKEYR = 0x08192A3BU; // unlock option bytes
+  FLASH->OPTKEYR = 0x4C5D6E7FU;
+
+  FLASH->OPTR &= ~FLASH_OPTR_nBOOT_SEL;  // BOOT0 source = BOOT0 pin
+
+  while (FLASH->SR & (FLASH_SR_BSY1 | FLASH_SR_BSY2 | FLASH_SR_CFGBSY));  // wait ready
+  FLASH->CR |= FLASH_CR_OPTSTRT;                                           // start option byte programming
+  while (FLASH->SR & (FLASH_SR_BSY1 | FLASH_SR_BSY2));                    // wait bank busy
+  while (FLASH->SR & FLASH_SR_CFGBSY);                                     // wait config write done
+
+  FLASH->CR |= FLASH_CR_OBL_LAUNCH;       // reload option bytes → system reset
+  while (1) { __asm volatile (""); }     // prevent optimizer from removing the loop
 }
 
-void initVariant() {
+// If the previous firmware asked for DFU before resetting, jump to the
+// STM32G0 ROM bootloader now — before USB is brought up. Going through a
+// full system reset first guarantees D+ went low long enough for the host
+// to see a disconnect, so it re-enumerates us cleanly as the DFU device.
+// The magic value must match sys::kDfuMagic in src/system/dfu.hpp.
+static void maybe_enter_rom_dfu() {
+  __HAL_RCC_PWR_CLK_ENABLE();     // PWR controller must be clocked to touch CR1
+  __HAL_RCC_RTCAPB_CLK_ENABLE();  // TAMP backup registers live on the RTC APB clock
+  HAL_PWR_EnableBkUpAccess();     // STM32G0 gates BKPxR access behind PWR->CR1.DBP
+  if (TAMP->BKP0R != 0xB007DF00u) return;
+
+  TAMP->BKP0R = 0;
+  HAL_Delay(50);  // extra quiet time on D+ so slow hubs notice the disconnect
+
+  __disable_irq();
+  HAL_RCC_DeInit();
+  HAL_DeInit();
+  SysTick->CTRL = 0;
+  __set_MSP(*reinterpret_cast<const uint32_t*>(0x1FFF0000));
+  reinterpret_cast<void(*)()>(*reinterpret_cast<const uint32_t*>(0x1FFF0004))();
+  while (1) { __asm volatile (""); }
+}
+
+extern "C" void initVariant() {
+  maybe_enter_rom_dfu();
   if (!boot0_pin_enabled()) enable_boot0_pin();
 }
 
