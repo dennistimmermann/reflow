@@ -1,10 +1,7 @@
 #pragma once
 // Non-blocking piezo buzzer driver. PWM via TIM14_CH1 on PF0.
-// Melodies are walked by elapsed time in update() — no ISR, no callbacks.
-// Single-file inline-header library per CLAUDE.md §5.
-//
-// Note: ::tone() uses TIM6 + GPIO bit-bang and cannot control duty/volume.
-// We own TIM14 directly via HardwareTimer for real PWM and volume control.
+// ::tone() uses TIM6 + GPIO bit-bang — we own TIM14 via HardwareTimer
+// for real PWM so duty cycle (and thus volume) can be controlled.
 
 #include <Arduino.h>
 #include <HardwareTimer.h>
@@ -60,12 +57,13 @@ class Buzzer {
 
     void begin() {
         ht_.setMode(1, TIMER_OUTPUT_COMPARE_PWM1, pin_);
+        set_volume(volume_);  // initialise cached pct_
     }
 
     void play(const Note* melody) {
         melody_     = melody;
         note_idx_   = 0;
-        prev_idx_   = 0xFF;  // force apply on first tick
+        prev_idx_   = UINT8_MAX;  // force apply on first tick
         note_start_ = millis();
     }
 
@@ -77,7 +75,11 @@ class Buzzer {
 
     // 0–100. Quadratic curve → 0–50% PWM duty (50% = max square wave).
     // Below ~14 is barely audible; 0 is silent.
-    void set_volume(uint8_t v) { volume_ = v; }
+    void set_volume(uint8_t v) {
+        volume_ = v;
+        uint32_t p = (uint32_t)v * v / 200;
+        pct_ = (v && !p) ? 1 : static_cast<uint8_t>(p);
+    }
 
     void beep()     { tone_ms(2000, 80); }
     void chirp_up() { play(melodies::chirp_up); }
@@ -92,24 +94,20 @@ class Buzzer {
     void update() {
         if (!melody_) return;
 
-        // Advance index while the current note has expired.
-        while (melody_[note_idx_].ms != 0 &&
-               millis() - note_start_ >= melody_[note_idx_].ms) {
+        uint32_t now = millis();
+        while (melody_[note_idx_].ms != 0 && now - note_start_ >= melody_[note_idx_].ms) {
             note_start_ += melody_[note_idx_].ms;
             ++note_idx_;
         }
 
-        if (melody_[note_idx_].ms == 0) { mute(); return; }
-        if (note_idx_ == prev_idx_) return;
+        const Note& n = melody_[note_idx_];
+        if (n.ms == 0)             { mute(); return; }
+        if (note_idx_ == prev_idx_)  return;
         prev_idx_ = note_idx_;
 
-        if (melody_[note_idx_].hz) {
-            ht_.setOverflow(melody_[note_idx_].hz, HERTZ_FORMAT);
-            // Quadratic: vol=100→50%, vol=50→12.5%, vol=0→silent.
-            // Clamp non-zero to at least 1% so quiet notes stay audible.
-            uint32_t pct = (uint32_t)volume_ * volume_ / 200;
-            if (volume_ && !pct) pct = 1;
-            ht_.setCaptureCompare(1, pct, PERCENT_COMPARE_FORMAT);
+        if (n.hz) {
+            ht_.setOverflow(n.hz, HERTZ_FORMAT);
+            ht_.setCaptureCompare(1, pct_, PERCENT_COMPARE_FORMAT);
             ht_.resume();
         } else {
             ht_.pause();
@@ -121,9 +119,10 @@ class Buzzer {
     uint32_t      pin_;
     HardwareTimer ht_;
     uint8_t       volume_     = 5;
+    uint8_t       pct_        = 1;     // cached from set_volume(); synced in begin()
     const Note*   melody_     = nullptr;
     uint8_t       note_idx_   = 0;
-    uint8_t       prev_idx_   = 0xFF;
+    uint8_t       prev_idx_   = UINT8_MAX;
     uint32_t      note_start_ = 0;
     Note          single_[2];  // scratch buffer for tone_ms()
 };

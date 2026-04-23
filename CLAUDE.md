@@ -73,6 +73,7 @@ Unused pins worth knowing about: PC15, PA1, PA6, PA8, PA9/PA10 (alt), PC6, PC7, 
 - **Upload/debug**: ST-Link over Tag-Connect. `upload_protocol = stlink`, `debug_tool = stlink`.
 - **USB**: enabled as CDC for a serial console and log forwarding.
 - **Scheduling**: cooperative super-loop with a small `Scheduler` that runs tasks at fixed periods. No RTOS to start; re-evaluate if LVGL + control loops start fighting for CPU.
+- **Coding style**: prefer readability and simplicity over performance. Optimise only when there is a measured problem or a clear hard-real-time constraint.
 
 ## 4. Directory layout
 
