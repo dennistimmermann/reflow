@@ -1,12 +1,11 @@
 #include "logger.hpp"
-#include "system/tud_serial.hpp"
 #include <cstdarg>
 #include <cstdio>
 
 namespace sys {
 
-// USB / CDC setup lives in main.cpp (usb_bsp_init + tusb_init). Nothing to
-// do here; kept as a no-op so the scheduler hook stays symmetric.
+// USB CDC comes up on its own (see src/system/usb_autoinit.cpp). Nothing
+// to do here; kept as a no-op so the scheduler hook stays symmetric.
 void logger_init() {}
 
 void logger_drain() {

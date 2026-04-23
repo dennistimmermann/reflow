@@ -1,9 +1,23 @@
-#include "system/tud_serial.hpp"
+#include "system/serial.hpp"
+#include <tusb.h>
 
-// Global Serial instance. Exposed via `extern TudSerial Serial;` in the
-// header. With STM32duino's USB CDC stack removed (HWSERIAL_NONE +
-// lib_ignore USBDevice in platformio.ini) there's no symbol conflict.
 TudSerial Serial;
+
+int TudSerial::available() { return tud_cdc_available(); }
+
+int TudSerial::read() {
+    uint8_t b;
+    return tud_cdc_read(&b, 1) ? (int)b : -1;
+}
+
+int TudSerial::peek() {
+    uint8_t b;
+    return tud_cdc_peek(&b) ? (int)b : -1;
+}
+
+void TudSerial::flush() { tud_cdc_write_flush(); }
+
+TudSerial::operator bool() { return tud_cdc_connected(); }
 
 size_t TudSerial::write(uint8_t c) {
     if (!tud_cdc_connected()) return 0;  // fire-and-forget when host isn't listening
@@ -19,9 +33,8 @@ size_t TudSerial::write(const uint8_t* buf, size_t n) {
     while (sent < n) {
         const uint32_t avail = tud_cdc_write_available();
         if (avail == 0) {
-            // Ring full: give the USB stack a chance to drain. A cold host
-            // that stopped reading would block us forever here, so bail if
-            // it disconnects mid-write.
+            // Ring full: give the USB stack a chance to drain. Bail if the
+            // host disconnects mid-write rather than blocking forever.
             tud_cdc_write_flush();
             tud_task();
             if (!tud_cdc_connected()) break;
