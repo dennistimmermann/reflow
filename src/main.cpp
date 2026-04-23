@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "system/dfu.hpp"
 #include <Buzzer.hpp>
+#include "sensors/mcu_temp.hpp"
 
 static driver::Buzzer buzzer(PIN_BUZZER);
 
@@ -17,6 +18,8 @@ static constexpr uint8_t kNumMelodies = sizeof(kMelodies) / sizeof(kMelodies[0])
 static uint8_t melody_idx = 0;
 
 void setup() {
+    Serial.begin(115200);
+    analogReadResolution(12);
     pinMode(PIN_USER_LED, OUTPUT);
     pinMode(PIN_FET_0, OUTPUT);
     digitalWrite(PIN_FET_0, LOW);
@@ -42,12 +45,20 @@ void loop() {
         }
     }
 
-    // Heartbeat LED — 100 ms toggle
-    static uint32_t led_ms    = 0;
+    // Heartbeat LED + temperature sample — 100 ms tick
+    static uint32_t tick_ms   = 0;
     static bool     led_state = false;
-    if (millis() - led_ms >= 100) {
-        led_ms    = millis();
+    if (millis() - tick_ms >= 100) {
+        tick_ms   = millis();
         led_state = !led_state;
         digitalWrite(PIN_USER_LED, led_state);
+        sensors::mcu_temp_update();
+    }
+
+    // MCU die temperature report — 1000 ms
+    static uint32_t temp_ms = 0;
+    if (millis() - temp_ms >= 1000) {
+        temp_ms = millis();
+        Serial.printf("MCU temp: %.1f C\r\n", sensors::mcu_temp_celsius());
     }
 }

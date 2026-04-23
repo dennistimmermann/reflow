@@ -18,7 +18,7 @@ def _find_cdc_port(env):
     return None
 
 
-def _wait_for_dfu(timeout=5.0):
+def _wait_for_dfu(timeout=8.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         result = subprocess.run(
@@ -30,20 +30,51 @@ def _wait_for_dfu(timeout=5.0):
     return False
 
 
+def _touch_1200(port):
+    # Firmware detects DFU entry on the DTR falling edge while line coding
+    # is 1200 baud (classic Arduino reset-to-bootloader). pyserial opens
+    # with DTR asserted by default, so opening at 1200 gives us the
+    # "asserted" half of the edge. Sleep so the host USB stack actually
+    # gets SET_LINE_CODING onto the wire, then drop DTR explicitly for
+    # the falling edge. Don't set dtr/rts pre-open — on macOS that turns
+    # into a TIOCMSET during open() and can fail with ENXIO on CDC ttys.
+    s = serial.Serial(port, 1200)
+    time.sleep(0.1)
+    s.dtr = False
+    time.sleep(0.05)
+    s.close()
+
+
 def before_upload(source, target, env):
+    # If the board is already sitting in DFU (e.g. from a prior failed
+    # flash), skip the touch entirely — opening the stale CDC tty node
+    # would just fail.
+    probe = subprocess.run(["dfu-util", "-l"], capture_output=True, text=True)
+    if "df11" in probe.stdout:
+        print("reset_to_dfu: board already in DFU mode, skipping touch")
+        return
+
     port = _find_cdc_port(env)
     if port:
-        print(f"reset_to_dfu: touching {port} at 1200 baud")
+        print(f"reset_to_dfu: touching {port} at 1200 baud (DTR drop)")
         try:
-            s = serial.Serial(port, 1200, timeout=1)
-            s.close()
+            _touch_1200(port)
         except Exception as exc:
             print(f"reset_to_dfu: serial touch failed ({exc}), trying DFU directly")
     else:
         print("reset_to_dfu: no CDC port found, trying DFU directly")
 
     if not _wait_for_dfu():
-        print("reset_to_dfu: DFU device not found after 5 s — is the board connected via USB?")
+        print("reset_to_dfu: DFU device not found after 8 s — is the board connected via USB?")
 
 
 env.AddPreAction("upload", before_upload)
+
+# Wrap the dfu-util invocation so the cosmetic exit-74 from the ':leave'
+# detach doesn't mark the upload as failed. See scripts/dfu_upload.py.
+env.Replace(
+    UPLOADCMD=(
+        '"$PYTHONEXE" "$PROJECT_DIR/scripts/dfu_upload.py" '
+        "$UPLOADER $UPLOADERFLAGS $SOURCE"
+    )
+)
