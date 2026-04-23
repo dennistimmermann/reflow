@@ -1,5 +1,4 @@
 #include "ntc.hpp"
-#include "../board.hpp"
 #include <Arduino.h>
 #include <math.h>
 
@@ -16,14 +15,14 @@ static constexpr float kVref       = 3.3f;
 static float last_c = 25.0f;
 
 void ntc_init() {
-  pinMode(board::PIN_NTC, INPUT_ANALOG);
+  pinMode(PIN_NTC, INPUT_ANALOG);
   analogReadResolution(12);
 }
 
 void ntc_tick() {
   // 16× oversample → ~14-bit effective.
   uint32_t acc = 0;
-  for (int i = 0; i < 16; ++i) acc += analogRead(board::PIN_NTC);
+  for (int i = 0; i < 16; ++i) acc += analogRead(PIN_NTC);
   const float v = (acc / 16.0f) * (kVref / 4095.0f);
   if (v <= 0.01f || v >= kVref - 0.01f) return;     // open / short
   const float r_ntc = kR_PULLUP * (v / (kVref - v));

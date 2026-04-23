@@ -8,7 +8,7 @@ This file is the single source of truth for the firmware design. Update it when 
 
 | Item | Part | Notes |
 |---|---|---|
-| MCU | STM32G0B1CBT (LQFP-48, 512 KB flash, 144 KB RAM, 64 MHz) | Single-core Cortex-M0+, full-speed USB device, UCPD |
+| MCU | STM32G0B1CET (LQFP-48, 512 KB flash, 144 KB RAM, 64 MHz) | Single-core Cortex-M0+, full-speed USB device, UCPD |
 | Thermocouples | 3× MAX6675 (K-type, 12-bit, 0.25 °C LSB) | SPI daisy with per-chip CS |
 | Motor driver | DRV8251A (H-bridge, ~4.1 A peak) | Drives door-open motor; current sense via IPROPI |
 | Load switches | 3× AO3400A logic-level N-FETs | Gate drive from MCU → SSRs / fan |

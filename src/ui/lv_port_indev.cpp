@@ -1,10 +1,9 @@
 #include "lv_port_indev.hpp"
-#include "../board.hpp"
 #include <RotaryEncoder.hpp>
 
 namespace ui {
 
-static driver::RotaryEncoder enc(board::PIN_ROT_A, board::PIN_ROT_B, board::PIN_ROT_BTN);
+static driver::RotaryEncoder enc(PIN_ROT_A, PIN_ROT_B, PIN_ROT_BTN);
 static lv_indev_t* indev_ = nullptr;
 static int32_t enc_accum_ = 0;
 

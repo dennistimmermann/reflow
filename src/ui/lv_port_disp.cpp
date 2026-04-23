@@ -1,5 +1,4 @@
 #include "lv_port_disp.hpp"
-#include "../board.hpp"
 #include <lvgl.h>
 #include <SPI.h>
 #include <GC9A01.hpp>
@@ -10,9 +9,9 @@ static constexpr uint16_t H = 240;
 static constexpr uint16_t W = 240;
 static constexpr uint32_t BUF_PX = (W * H) / 10;     // 1/10 of the screen
 
-static SPIClass spi_lcd(board::PIN_LCD_MOSI, /*miso*/ PNUM_NOT_DEFINED, board::PIN_LCD_SCK);
-static driver::GC9A01 lcd(spi_lcd, board::PIN_LCD_CS, board::PIN_LCD_DC,
-                          board::PIN_LCD_RST, board::PIN_LCD_BL);
+static SPIClass spi_lcd(PIN_LCD_MOSI, /*miso*/ PNUM_NOT_DEFINED, PIN_LCD_SCK);
+static driver::GC9A01 lcd(spi_lcd, PIN_LCD_CS, PIN_LCD_DC,
+                          PIN_LCD_RST, PIN_LCD_BL);
 
 static lv_color_t buf_a[BUF_PX];
 static lv_color_t buf_b[BUF_PX];

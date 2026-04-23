@@ -1,18 +1,17 @@
 #include "thermocouples.hpp"
-#include "../board.hpp"
 #include <MAX6675.hpp>
 #include <SPI.h>
 
 namespace sensors {
 
 // SPI2 is shared across all three MAX6675 chips; we switch CS per transaction.
-static SPIClass spi_tc(board::PIN_TC_MISO, /*miso*/ board::PIN_TC_MISO,
-                       board::PIN_TC_SCK);
+static SPIClass spi_tc(PIN_TC_MISO, /*miso*/ PIN_TC_MISO,
+                       PIN_TC_SCK);
 
 static driver::MAX6675 tc[3] = {
-  driver::MAX6675(spi_tc, board::PIN_TC_CS_0),
-  driver::MAX6675(spi_tc, board::PIN_TC_CS_1),
-  driver::MAX6675(spi_tc, board::PIN_TC_CS_2),
+  driver::MAX6675(spi_tc, PIN_TC_CS_0),
+  driver::MAX6675(spi_tc, PIN_TC_CS_1),
+  driver::MAX6675(spi_tc, PIN_TC_CS_2),
 };
 
 // IIR state per channel. α = 0.3 — re-tune after the first thermal run.

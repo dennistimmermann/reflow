@@ -16,8 +16,16 @@ inline bool dfu_requested() {
 }
 
 // Deinit peripherals and jump to the STM32G0B1 ROM DFU bootloader (0x1FFF0000).
-// Does not return.
+// GPIO is preserved across the jump (no reset), so driving FETs LOW here keeps
+// loads off for the entire DFU session. Does not return.
 inline void enter_dfu() {
+    digitalWrite(PIN_FET_0, LOW);
+    digitalWrite(PIN_FET_1, LOW);
+    digitalWrite(PIN_FET_2, LOW);
+    digitalWrite(PIN_MOTOR_IN1, LOW);
+    digitalWrite(PIN_MOTOR_IN2, LOW);
+    digitalWrite(PIN_BUZZER, LOW);
+
     __disable_irq();
     HAL_RCC_DeInit();
     HAL_DeInit();

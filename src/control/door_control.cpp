@@ -1,11 +1,10 @@
 #include "door_control.hpp"
-#include "../board.hpp"
 #include "../sensors/ntc.hpp"
 #include <DRV8251.hpp>
 
 namespace control {
 
-static driver::DRV8251 motor(board::PIN_MOTOR_IN1, board::PIN_MOTOR_IN2);
+static driver::DRV8251 motor(PIN_MOTOR_IN1, PIN_MOTOR_IN2);
 static DoorState state = DoorState::CLOSED;
 
 // Hard limit for the door motor body temperature — refuse to drive above this.
