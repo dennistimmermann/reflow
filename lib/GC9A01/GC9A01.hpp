@@ -42,37 +42,28 @@ class GC9A01 {
   }
 
   // RGB565, MSB-first. Length is in pixels. DMA transfer.
+  // Splits into ≤65,534-byte (32,767-pixel) chunks because the DMA NDTR is
+  // 16-bit (max 65,535) and we need an even byte count to keep 2-byte pixel
+  // alignment across chunk boundaries. Controller's RAMWR auto-increments,
+  // so consecutive DMAs to the same window pick up where the last left off.
   inline void blit(const uint16_t* pixels, uint32_t count) {
     digitalWrite(dc_, HIGH);
     digitalWrite(cs_, LOW);
-    bus_.transmit_dma(reinterpret_cast<const uint8_t*>(pixels), count * 2);
-    bus_.wait_idle();
+
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(pixels);
+    uint32_t bytes = count * 2;
+    constexpr uint32_t kMaxChunk = 65534;
+    while (bytes > 0) {
+      const uint32_t chunk = bytes > kMaxChunk ? kMaxChunk : bytes;
+      bus_.transmit_dma(p, chunk);
+      bus_.wait_idle();
+      p     += chunk;
+      bytes -= chunk;
+    }
+
     digitalWrite(cs_, HIGH);
   }
 
-  // Solid-colour fill of the full 240×240 frame via DMA. A half-frame buffer
-  // (120 rows = 57,600 bytes) is pre-filled and DMA'd out twice — only two
-  // CPU round-trips per fill instead of 240. A full-frame single DMA isn't
-  // possible: DMA NDTR is 16-bit (max 65,535 bytes) and the frame is 115,200,
-  // so two transfers is the minimum for any buffer choice.
-  inline void fill_screen(uint16_t color565) {
-    static constexpr uint32_t kHalfFrameBytes = 240 * 120 * 2;  // 57,600
-    static uint8_t buf[kHalfFrameBytes];
-    const uint8_t hi = color565 >> 8;
-    const uint8_t lo = color565 & 0xFF;
-    for (uint32_t i = 0; i < sizeof(buf); i += 2) {
-      buf[i]     = hi;
-      buf[i + 1] = lo;
-    }
-    set_window(0, 0, 239, 239);
-    digitalWrite(dc_, HIGH);
-    digitalWrite(cs_, LOW);
-    bus_.transmit_dma(buf, sizeof(buf));
-    bus_.wait_idle();
-    bus_.transmit_dma(buf, sizeof(buf));
-    bus_.wait_idle();
-    digitalWrite(cs_, HIGH);
-  }
 
  private:
   void hard_reset() {
