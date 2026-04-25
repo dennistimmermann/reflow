@@ -80,6 +80,10 @@ void SpiDmaTx::wait_idle() {
   while (HAL_SPI_GetState(&hspi_) != HAL_SPI_STATE_READY) { /* spin */ }
 }
 
+bool SpiDmaTx::is_idle() {
+  return HAL_SPI_GetState(&hspi_) == HAL_SPI_STATE_READY;
+}
+
 }  // namespace driver
 
 extern "C" void DMA1_Channel1_IRQHandler() {

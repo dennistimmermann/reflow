@@ -39,6 +39,10 @@ class SpiDmaTx {
   // Block until any in-flight DMA finishes and the SPI shift register drains.
   void wait_idle();
 
+  // Non-blocking check — true once the bus is ready for a new transfer.
+  // Lets callers run other work (e.g. USB tud_task()) while waiting.
+  bool is_idle();
+
   // Exposed so the IRQ trampoline can call HAL_DMA_IRQHandler.
   DMA_HandleTypeDef& dma_handle() { return hdma_; }
 

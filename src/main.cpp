@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <IWatchdog.h>
 #include <SPI.h>
+#include <tusb.h>
 #include <Buzzer.hpp>
 #include <GC9A01.hpp>
 #include <MAX6675.hpp>
@@ -193,7 +194,7 @@ static void render_frame() {
         first = false;
     } else {
         // Wait for previous frame's bottom DMA before kicking this top.
-        spi_lcd.wait_idle();
+        while (!spi_lcd.is_idle()) tud_task();
     }
     spi_lcd.transmit_dma(reinterpret_cast<const uint8_t*>(half_top),
                          sizeof(half_top));
