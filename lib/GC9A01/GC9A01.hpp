@@ -48,8 +48,36 @@ class GC9A01 {
     digitalWrite(cs_, HIGH);
   }
 
+  // Solid colour fill of the full 240x240 frame in a single CS-low burst.
+  // Some GC9A01 modules misbehave when CS toggles inside a RAMWR session,
+  // so for bring-up tests this is the more reliable path. RGB565 is sent as
+  // hi-byte-first to match the controller's native order regardless of MCU
+  // endianness. SPI_TRANSMITONLY skips the duplex receive so the row buffer
+  // can be reused across all 240 row writes without being clobbered.
+  inline void fill_screen(uint16_t color565) {
+    uint8_t row[240 * 2];
+    const uint8_t hi = color565 >> 8;
+    const uint8_t lo = color565 & 0xFF;
+    for (uint32_t i = 0; i < sizeof(row); i += 2) {
+      row[i]     = hi;
+      row[i + 1] = lo;
+    }
+    set_window(0, 0, 239, 239);
+    digitalWrite(dc_, HIGH);
+    digitalWrite(cs_, LOW);
+    spi_.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
+    for (uint16_t y = 0; y < 240; ++y) {
+      spi_.transfer(row, sizeof(row), SPI_TRANSMITONLY);
+    }
+    spi_.endTransaction();
+    digitalWrite(cs_, HIGH);
+  }
+
  private:
-  static constexpr uint32_t kSpiHz = 40'000'000;
+  // 30 MHz is a comfortable working point on most GC9A01 modules. The earlier
+  // 40 MHz attempt failed for unrelated reasons (per-row CS toggling broke
+  // RAMWR), so once that's fixed there's no need to stay slow.
+  static constexpr uint32_t kSpiHz = 30'000'000;
 
   void hard_reset() {
     digitalWrite(rst_, LOW);  delay(10);
@@ -84,15 +112,77 @@ class GC9A01 {
     digitalWrite(cs_, HIGH);
   }
 
+  // Canonical GC9A01 init from the controller datasheet / reference modules.
+  // The bulk are undocumented vendor "inner registers" (0x80..0x9F, 0xE8, 0xEB,
+  // 0xED, 0xEF, 0xF0..0xF3 etc.) that configure power, gamma and VCOM. Without
+  // them the panel powers on with the backlight lit but stays black — exactly
+  // why the abbreviated init didn't work. MADCTL=0x48 selects MX+BGR (so the
+  // datasheet's RGB565 bytes show as the expected colour); flip bit 3 to 0x40
+  // if red and blue come out swapped on the panel module you have.
   void run_init_sequence() {
-    // Abbreviated GC9A01 init — exit sleep, MADCTL, COLMOD (RGB565), display on.
-    // Full magic-register sequence goes here; omitted in the scaffold to keep
-    // the file short. Fill in from the GC9A01 datasheet / AliExpress demo
-    // before first bring-up.
-    write_cmd(0x11); delay(120);
-    write_cmd(0x36); write_data8(0x48);        // MADCTL: MX, BGR
-    write_cmd(0x3A); write_data8(0x05);        // COLMOD: 16-bit/pixel
-    write_cmd(0x29); delay(20);                // Display ON
+    // Format: [cmd, n_args, args...]. End-of-table marker is cmd=0x00 with n=0.
+    static const uint8_t kInit[] = {
+      0xEF, 0,
+      0xEB, 1, 0x14,
+      0xFE, 0,                                 // inner register enable 1
+      0xEF, 0,                                 // inner register enable 2
+      0xEB, 1, 0x14,
+      0x84, 1, 0x40,
+      0x85, 1, 0xFF,
+      0x86, 1, 0xFF,
+      0x87, 1, 0xFF,
+      0x88, 1, 0x0A,
+      0x89, 1, 0x21,
+      0x8A, 1, 0x00,
+      0x8B, 1, 0x80,
+      0x8C, 1, 0x01,
+      0x8D, 1, 0x01,
+      0x8E, 1, 0xFF,
+      0x8F, 1, 0xFF,
+      0xB6, 2, 0x00, 0x00,                     // display function control
+      0x36, 1, 0x48,                           // MADCTL: MX, BGR
+      0x3A, 1, 0x05,                           // COLMOD: 16 bpp / RGB565
+      0x90, 4, 0x08, 0x08, 0x08, 0x08,
+      0xBD, 1, 0x06,
+      0xBC, 1, 0x00,
+      0xFF, 3, 0x60, 0x01, 0x04,
+      0xC3, 1, 0x13,                           // power control 2
+      0xC4, 1, 0x13,                           // power control 3
+      0xC9, 1, 0x22,                           // power control 4
+      0xBE, 1, 0x11,
+      0xE1, 2, 0x10, 0x0E,
+      0xDF, 3, 0x21, 0x0C, 0x02,
+      0xF0, 6, 0x45, 0x09, 0x08, 0x08, 0x26, 0x2A,   // gamma 1
+      0xF1, 6, 0x43, 0x70, 0x72, 0x36, 0x37, 0x6F,   // gamma 2
+      0xF2, 6, 0x45, 0x09, 0x08, 0x08, 0x26, 0x2A,   // gamma 3
+      0xF3, 6, 0x43, 0x70, 0x72, 0x36, 0x37, 0x6F,   // gamma 4
+      0xED, 2, 0x1B, 0x0B,
+      0xAE, 1, 0x77,
+      0xCD, 1, 0x63,
+      0x70, 9, 0x07, 0x07, 0x04, 0x0E, 0x0F, 0x09, 0x07, 0x08, 0x03,
+      0xE8, 1, 0x34,                           // frame rate
+      0x62, 12, 0x18, 0x0D, 0x71, 0xED, 0x70, 0x70, 0x18, 0x0F, 0x71, 0xEF, 0x70, 0x70,
+      0x63, 12, 0x18, 0x11, 0x71, 0xF1, 0x70, 0x70, 0x18, 0x13, 0x71, 0xF3, 0x70, 0x70,
+      0x64, 7,  0x28, 0x29, 0xF1, 0x01, 0xF1, 0x00, 0x07,
+      0x66, 10, 0x3C, 0x00, 0xCD, 0x67, 0x45, 0x45, 0x10, 0x00, 0x00, 0x00,
+      0x67, 10, 0x00, 0x3C, 0x00, 0x00, 0x00, 0x01, 0x54, 0x10, 0x32, 0x98,
+      0x74, 7,  0x10, 0x85, 0x80, 0x00, 0x00, 0x4E, 0x00,
+      0x98, 2,  0x3E, 0x07,
+      0x35, 0,                                 // tearing effect line ON
+      0x21, 0,                                 // display inversion ON
+      0x00, 0,                                 // end marker
+    };
+
+    for (size_t i = 0; i < sizeof(kInit); ) {
+      const uint8_t cmd = kInit[i++];
+      const uint8_t n   = kInit[i++];
+      if (cmd == 0x00 && n == 0) break;
+      write_cmd(cmd);
+      for (uint8_t j = 0; j < n; ++j) write_data8(kInit[i++]);
+    }
+
+    write_cmd(0x11); delay(120);               // sleep out
+    write_cmd(0x29); delay(20);                // display on
   }
 
   SPIClass& spi_;

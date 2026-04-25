@@ -9,7 +9,7 @@ namespace sys {
 class Scheduler {
  public:
   struct Task {
-    uint32_t period_ms;
+    uint32_t interval;
     void (*fn)();
     uint32_t next_due = 0;
   };
@@ -18,22 +18,22 @@ class Scheduler {
 
   void add(Task t) {
     if (count_ >= kMaxTasks) return;
-    t.next_due = millis() + t.period_ms;
+    t.next_due = millis() + t.interval;
     tasks_[count_++] = t;
   }
 
-  void run_once() {
+  void run() {
     const uint32_t now = millis();
     for (size_t i = 0; i < count_; ++i) {
       auto& t = tasks_[i];
       // Signed compare handles millis() wrap cleanly.
       if (static_cast<int32_t>(now - t.next_due) >= 0) {
         t.fn();
-        t.next_due += t.period_ms;
+        t.next_due += t.interval;
         // If we fell badly behind (e.g. LVGL flush), resync rather than
         // burst-fire the task to catch up.
-        if (static_cast<int32_t>(now - t.next_due) > static_cast<int32_t>(t.period_ms)) {
-          t.next_due = now + t.period_ms;
+        if (static_cast<int32_t>(now - t.next_due) > static_cast<int32_t>(t.interval)) {
+          t.next_due = now + t.interval;
         }
       }
     }

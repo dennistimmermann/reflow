@@ -43,7 +43,7 @@ void init() {
 }
 
 void tick() {
-  scheduler.run_once();
+  scheduler.run();
 }
 
 }  // namespace app

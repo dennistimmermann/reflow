@@ -9,7 +9,13 @@ static constexpr uint16_t H = 240;
 static constexpr uint16_t W = 240;
 static constexpr uint32_t BUF_PX = (W * H) / 10;     // 1/10 of the screen
 
-static SPIClass spi_lcd(PIN_LCD_MOSI, /*miso*/ PNUM_NOT_DEFINED, PIN_LCD_SCK);
+// MISO must be a valid SPI1_MISO pin even though the LCD is write-only:
+// STM32duino's spi_init() bails if any of MOSI/MISO/SCLK is NP, leaving the
+// peripheral uninitialised so the first transfer() call hangs forever. PA6 is
+// unused on this board (CLAUDE.md §2) and maps to SPI1_MISO, so it's safe as
+// a dummy. Same workaround as the MAX6675 bus in main.cpp.
+static constexpr uint32_t PIN_LCD_MISO_DUMMY = PA6;
+static SPIClass spi_lcd(PIN_LCD_MOSI, PIN_LCD_MISO_DUMMY, PIN_LCD_SCK);
 static driver::GC9A01 lcd(spi_lcd, PIN_LCD_CS, PIN_LCD_DC,
                           PIN_LCD_RST, PIN_LCD_BL);
 
