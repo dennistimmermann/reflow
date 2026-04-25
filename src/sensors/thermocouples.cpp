@@ -5,8 +5,11 @@
 namespace sensors {
 
 // SPI2 is shared across all three MAX6675 chips; we switch CS per transaction.
-static SPIClass spi_tc(PIN_TC_MISO, /*miso*/ PIN_TC_MISO,
-                       PIN_TC_SCK);
+// MAX6675 is receive-only, but STM32duino's spi_init bails silently unless MOSI
+// resolves to the target SPI peripheral. Workaround: point MOSI at PB15 — an
+// unused pin that happens to be a valid SPI2_MOSI AF. The peripheral wiggles it
+// harmlessly while we clock data in on PD3.
+static SPIClass spi_tc(PB15, PIN_TC_MISO, PIN_TC_SCK);
 
 static driver::MAX6675 tc[3] = {
   driver::MAX6675(spi_tc, PIN_TC_CS_0),
