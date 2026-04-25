@@ -4,26 +4,29 @@
 // J11 is consistent with GC9A01 modules on AliExpress/LCSC). If it's an
 // ST7789-round instead, swap the init table below — the rest is identical.
 //
-// SPI1 @ up to 40 MHz. CS/DC/RST/BL are GPIOs. Blitting is synchronous here;
-// LVGL's lv_port_disp is responsible for DMA + flush_cb signalling.
+// SPI access goes through driver::SpiDmaTx — bulk pixel writes are DMA, small
+// command/header writes are polled. CS/DC/RST/BL are GPIOs.
 //
 // Single-file inline-header library per CLAUDE.md §5.
 
 #include <Arduino.h>
-#include <SPI.h>
+#include <SpiDmaTx.hpp>
 
 namespace driver {
 
 class GC9A01 {
  public:
-  GC9A01(SPIClass& spi, uint32_t cs, uint32_t dc, uint32_t rst, uint32_t bl)
-    : spi_(spi), cs_(cs), dc_(dc), rst_(rst), bl_(bl) {}
+  GC9A01(SpiDmaTx& bus, uint32_t cs, uint32_t dc, uint32_t rst, uint32_t bl)
+    : bus_(bus), cs_(cs), dc_(dc), rst_(rst), bl_(bl) {}
 
   void begin() {
     pinMode(cs_, OUTPUT);  digitalWrite(cs_,  HIGH);
     pinMode(dc_, OUTPUT);  digitalWrite(dc_,  HIGH);
     pinMode(rst_, OUTPUT); digitalWrite(rst_, HIGH);
     pinMode(bl_, OUTPUT);  digitalWrite(bl_,  LOW);
+
+    // SPI1 on STM32G0B1: APB=64 MHz, /2 prescaler = 32 MHz (the ceiling).
+    bus_.begin(SPI_BAUDRATEPRESCALER_2);
 
     hard_reset();
     run_init_sequence();
@@ -38,47 +41,40 @@ class GC9A01 {
     write_cmd(0x2C);
   }
 
-  // RGB565, MSB-first. Length is in pixels.
+  // RGB565, MSB-first. Length is in pixels. DMA transfer.
   inline void blit(const uint16_t* pixels, uint32_t count) {
     digitalWrite(dc_, HIGH);
     digitalWrite(cs_, LOW);
-    spi_.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
-    spi_.transfer((uint8_t*)pixels, count * 2);
-    spi_.endTransaction();
+    bus_.transmit_dma(reinterpret_cast<const uint8_t*>(pixels), count * 2);
+    bus_.wait_idle();
     digitalWrite(cs_, HIGH);
   }
 
-  // Solid colour fill of the full 240x240 frame in a single CS-low burst.
-  // Some GC9A01 modules misbehave when CS toggles inside a RAMWR session,
-  // so for bring-up tests this is the more reliable path. RGB565 is sent as
-  // hi-byte-first to match the controller's native order regardless of MCU
-  // endianness. SPI_TRANSMITONLY skips the duplex receive so the row buffer
-  // can be reused across all 240 row writes without being clobbered.
+  // Solid-colour fill of the full 240×240 frame via DMA. A half-frame buffer
+  // (120 rows = 57,600 bytes) is pre-filled and DMA'd out twice — only two
+  // CPU round-trips per fill instead of 240. A full-frame single DMA isn't
+  // possible: DMA NDTR is 16-bit (max 65,535 bytes) and the frame is 115,200,
+  // so two transfers is the minimum for any buffer choice.
   inline void fill_screen(uint16_t color565) {
-    uint8_t row[240 * 2];
+    static constexpr uint32_t kHalfFrameBytes = 240 * 120 * 2;  // 57,600
+    static uint8_t buf[kHalfFrameBytes];
     const uint8_t hi = color565 >> 8;
     const uint8_t lo = color565 & 0xFF;
-    for (uint32_t i = 0; i < sizeof(row); i += 2) {
-      row[i]     = hi;
-      row[i + 1] = lo;
+    for (uint32_t i = 0; i < sizeof(buf); i += 2) {
+      buf[i]     = hi;
+      buf[i + 1] = lo;
     }
     set_window(0, 0, 239, 239);
     digitalWrite(dc_, HIGH);
     digitalWrite(cs_, LOW);
-    spi_.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
-    for (uint16_t y = 0; y < 240; ++y) {
-      spi_.transfer(row, sizeof(row), SPI_TRANSMITONLY);
-    }
-    spi_.endTransaction();
+    bus_.transmit_dma(buf, sizeof(buf));
+    bus_.wait_idle();
+    bus_.transmit_dma(buf, sizeof(buf));
+    bus_.wait_idle();
     digitalWrite(cs_, HIGH);
   }
 
  private:
-  // 30 MHz is a comfortable working point on most GC9A01 modules. The earlier
-  // 40 MHz attempt failed for unrelated reasons (per-row CS toggling broke
-  // RAMWR), so once that's fixed there's no need to stay slow.
-  static constexpr uint32_t kSpiHz = 30'000'000;
-
   void hard_reset() {
     digitalWrite(rst_, LOW);  delay(10);
     digitalWrite(rst_, HIGH); delay(120);
@@ -87,28 +83,22 @@ class GC9A01 {
   inline void write_cmd(uint8_t c) {
     digitalWrite(dc_, LOW);
     digitalWrite(cs_, LOW);
-    spi_.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
-    spi_.transfer(c);
-    spi_.endTransaction();
+    bus_.transmit(&c, 1);
     digitalWrite(cs_, HIGH);
   }
 
   inline void write_data8(uint8_t d) {
     digitalWrite(dc_, HIGH);
     digitalWrite(cs_, LOW);
-    spi_.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
-    spi_.transfer(d);
-    spi_.endTransaction();
+    bus_.transmit(&d, 1);
     digitalWrite(cs_, HIGH);
   }
 
   inline void write_data16(uint16_t d) {
+    const uint8_t buf[2] = { uint8_t(d >> 8), uint8_t(d & 0xFF) };
     digitalWrite(dc_, HIGH);
     digitalWrite(cs_, LOW);
-    spi_.beginTransaction(SPISettings(kSpiHz, MSBFIRST, SPI_MODE0));
-    spi_.transfer(d >> 8);
-    spi_.transfer(d & 0xFF);
-    spi_.endTransaction();
+    bus_.transmit(buf, 2);
     digitalWrite(cs_, HIGH);
   }
 
@@ -185,8 +175,8 @@ class GC9A01 {
     write_cmd(0x29); delay(20);                // display on
   }
 
-  SPIClass& spi_;
-  uint32_t cs_, dc_, rst_, bl_;
+  SpiDmaTx& bus_;
+  uint32_t  cs_, dc_, rst_, bl_;
 };
 
 }  // namespace driver

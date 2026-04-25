@@ -4,6 +4,7 @@
 #include <Buzzer.hpp>
 #include <GC9A01.hpp>
 #include <MAX6675.hpp>
+#include <SpiDmaTx.hpp>
 #include "sensors/mcu_temp.hpp"
 #include "system/scheduler.hpp"
 
@@ -19,16 +20,12 @@ static constexpr uint32_t PIN_TC_MOSI_DUMMY = PB15;
 static SPIClass spi_tc(PIN_TC_MOSI_DUMMY, PIN_TC_MISO, PIN_TC_SCK);
 static driver::MAX6675 tc0(spi_tc, PIN_TC_CS_0);
 
-// SPI1 + GC9A01 — debug bring-up of the 240x240 round LCD. Bypasses LVGL on
-// purpose; rip this out once lv_port_disp is wired into app composition.
-//
-// MISO must be a valid SPI1_MISO pin even though the LCD is write-only: same
-// trap as the MAX6675 bus above — STM32duino's spi_init() bails if any of
-// MOSI/MISO/SCLK is NP, leaving the peripheral uninitialised and any
-// transfer() call hanging forever. PA6 is unused on this board (per CLAUDE.md
-// §2) and maps to SPI1_MISO, so it's a safe dummy.
-static constexpr uint32_t PIN_LCD_MISO_DUMMY = PA6;
-static SPIClass spi_lcd(PIN_LCD_MOSI, PIN_LCD_MISO_DUMMY, PIN_LCD_SCK);
+// SPI1 + GC9A01 — debug bring-up of the 240x240 round LCD via the HAL-backed
+// SpiDmaTx bus. Bypasses LVGL on purpose; rip this out once lv_port_disp is
+// wired into app composition. SpiDmaTx owns SPI1 and DMA1_Channel1.
+static driver::SpiDmaTx spi_lcd(SPI1, PIN_LCD_MOSI, PIN_LCD_SCK,
+                                DMA1_Channel1, DMA_REQUEST_SPI1_TX,
+                                DMA1_Channel1_IRQn);
 static driver::GC9A01 lcd(spi_lcd, PIN_LCD_CS, PIN_LCD_DC,
                           PIN_LCD_RST, PIN_LCD_BL);
 
@@ -94,8 +91,7 @@ void setup() {
     spi_tc.begin();
     tc0.begin();
 
-    spi_lcd.begin();
-    lcd.begin();
+    lcd.begin();   // configures spi_lcd (SPI1 + DMA1_Channel1) internally
     lcd.fill_screen(0x0000);
 
     sched.add({.interval = 100,  .fn = heartbeat_100ms});

@@ -1,7 +1,7 @@
 #include "lv_port_disp.hpp"
 #include <lvgl.h>
-#include <SPI.h>
 #include <GC9A01.hpp>
+#include <SpiDmaTx.hpp>
 
 namespace ui {
 
@@ -9,13 +9,12 @@ static constexpr uint16_t H = 240;
 static constexpr uint16_t W = 240;
 static constexpr uint32_t BUF_PX = (W * H) / 10;     // 1/10 of the screen
 
-// MISO must be a valid SPI1_MISO pin even though the LCD is write-only:
-// STM32duino's spi_init() bails if any of MOSI/MISO/SCLK is NP, leaving the
-// peripheral uninitialised so the first transfer() call hangs forever. PA6 is
-// unused on this board (CLAUDE.md §2) and maps to SPI1_MISO, so it's safe as
-// a dummy. Same workaround as the MAX6675 bus in main.cpp.
-static constexpr uint32_t PIN_LCD_MISO_DUMMY = PA6;
-static SPIClass spi_lcd(PIN_LCD_MOSI, PIN_LCD_MISO_DUMMY, PIN_LCD_SCK);
+// HAL-backed SPI1 + DMA1_Channel1. Same instance owners as the debug bring-up
+// in main.cpp — when LVGL is composed in, drop main.cpp's spi_lcd / lcd
+// statics so this module is the sole owner of SPI1 + DMA1_Channel1.
+static driver::SpiDmaTx spi_lcd(SPI1, PIN_LCD_MOSI, PIN_LCD_SCK,
+                                DMA1_Channel1, DMA_REQUEST_SPI1_TX,
+                                DMA1_Channel1_IRQn);
 static driver::GC9A01 lcd(spi_lcd, PIN_LCD_CS, PIN_LCD_DC,
                           PIN_LCD_RST, PIN_LCD_BL);
 
@@ -31,8 +30,7 @@ static void flush_cb(lv_display_t* d, const lv_area_t* area, uint8_t* px) {
 }
 
 void lv_port_disp_init() {
-  spi_lcd.begin();
-  lcd.begin();
+  lcd.begin();   // configures spi_lcd internally
 
   disp_ = lv_display_create(W, H);
   lv_display_set_buffers(disp_, buf_a, buf_b, sizeof(buf_a),
