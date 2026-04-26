@@ -1,4 +1,5 @@
 #include "thermocouples.hpp"
+#include "../system/store.hpp"
 #include <MAX6675.hpp>
 #include <SPI.h>
 
@@ -19,31 +20,44 @@ static driver::MAX6675 tc[3] = {
 
 // IIR state per channel. α = 0.3 — re-tune after the first thermal run.
 static float filtered[3] = {0, 0, 0};
-static bool  open_tc[3]  = {false, false, false};
-static bool  fresh[3]    = {false, false, false};
 static uint8_t rr = 0;    // round-robin index
 
-void thermocouples_init() {
+static sys::Slot<float>* tc_slots[3] = {
+  &sys::store().tc_top,
+  &sys::store().tc_bottom,
+  &sys::store().tc_target,
+};
+static sys::Slot<bool>* tc_open_slots[3] = {
+  &sys::store().tc_top_open,
+  &sys::store().tc_bottom_open,
+  &sys::store().tc_target_open,
+};
+
+void ThermocoupleTask::on_init() {
   spi_tc.begin();
   for (auto& ch : tc) ch.begin();
 }
 
-void thermocouples_tick() {
+void ThermocoupleTask::on_tick() {
   const auto r = tc[rr].read();
   if (!r.open_tc) {
     filtered[rr] = 0.3f * r.celsius + 0.7f * filtered[rr];
+    tc_slots[rr]->set(filtered[rr]);
   }
-  open_tc[rr] = r.open_tc;
-  fresh[rr] = true;
+  tc_open_slots[rr]->set(r.open_tc);
   rr = (rr + 1) % 3;
 }
 
 TcReading read(TcRole role) {
   // TODO: honour SensorMap from settings; currently role == physical index.
   const auto i = static_cast<uint8_t>(role);
-  TcReading out{ filtered[i], open_tc[i], fresh[i] };
-  fresh[i] = false;
-  return out;
+  const auto& slot      = *tc_slots[i];
+  const auto& open_slot = *tc_open_slots[i];
+  return TcReading{
+    slot.get(),
+    open_slot.valid() ? open_slot.get() : false,
+    slot.fresh_within(sys::freshness::kTcBudgetMs),
+  };
 }
 
 }  // namespace sensors
