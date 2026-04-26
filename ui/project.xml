@@ -1,6 +1,6 @@
 <project name="ui_reflow">
 	<targets>
-		<target name="target" platform="stm32g0" board="reflow_oven" framework="arduino">
+		<target name="target">
 			<display width="200" height="200" />
 		</target>
 	</targets>
