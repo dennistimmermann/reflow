@@ -20,7 +20,6 @@ static sys::Scheduler scheduler;
 // Modules that own a Meyers-singleton Task (heater/fan/program) live
 // inside their own TUs; we just take a reference here. Modules still
 // using free-function ticks are wrapped in LegacyTask until they migrate.
-static sys::LegacyTask           t_safety("safety", 100, control::safety_tick);
 static sensors::ThermocoupleTask t_thermocouples;
 static sensors::NtcTask          t_ntc;
 static sys::LegacyTask           t_door("door",  50, control::door_tick);
@@ -36,13 +35,13 @@ void init() {
   control::heater_task() .on_init();
   control::fan_task()    .on_init();
   control::program_task().on_init();
+  control::safety_task() .on_init();
 
   control::door_init();
-  control::safety_init();
 
   ui::init();
 
-  scheduler.add(t_safety);          // highest priority — first
+  scheduler.add(control::safety_task());   // highest priority — first
   scheduler.add(t_thermocouples);
   scheduler.add(t_ntc);
   scheduler.add(control::heater_task());

@@ -1,6 +1,7 @@
 #include "heater_control.hpp"
 #include "pid.hpp"
 #include "../system/store.hpp"
+#include "../system/event_bus.hpp"
 
 namespace control {
 
@@ -14,6 +15,13 @@ void HeaterTask::on_init() {
   set_state(static_cast<uint32_t>(State::OFF));
   sys::store().duty_top.set(0.0f);
   sys::store().duty_bottom.set(0.0f);
+
+  sys::bus().fault_tripped.subscribe([](const sys::FaultTripped&) {
+    heater_task().kill();
+  });
+  sys::bus().fault_acknowledged.subscribe([](const sys::FaultAcknowledged&) {
+    heater_task().clear_kill();
+  });
 }
 
 void HeaterTask::on_tick() {
