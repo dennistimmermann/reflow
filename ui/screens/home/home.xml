@@ -1,0 +1,6 @@
+<screen>
+	<view extends="lv_obj">
+		<!-- Add your code here -->
+		<lv_label text="Hello world" style_text_font="text_option" />
+	</view>
+</screen>
