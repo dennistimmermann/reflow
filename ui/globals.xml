@@ -12,6 +12,7 @@
 	</styles>
 
 	<subjects>
+		<int name="mode_select" value="0" />
 		<!-- Add <int>, <string>, or <float> subjects here -->
 	</subjects>
 
