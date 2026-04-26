@@ -8,7 +8,7 @@ namespace sys {
 // to do here; kept as a no-op so the scheduler hook stays symmetric.
 void logger_init() {}
 
-void logger_drain() {
+void LoggerDrainTask::on_tick() {
   // no-op for now; Serial.write pushes into TinyUSB's CDC ring without blocking.
 }
 

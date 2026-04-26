@@ -6,6 +6,7 @@
 #include <MAX6675.hpp>
 #include "sensors/mcu_temp.hpp"
 #include "system/scheduler.hpp"
+#include "system/task.hpp"
 #include "ui/lv_port_disp.hpp"
 
 static driver::Buzzer buzzer(PIN_BUZZER);
@@ -102,10 +103,14 @@ void setup() {
     ui::lv_port_disp_init();   // configures SPI1 + DMA1_Channel1 + GC9A01
     build_screen();
 
-    sched.add({.interval = 10,   .fn = lvgl_tick_10ms});
-    sched.add({.interval = 100,  .fn = heartbeat_100ms});
-    sched.add({.interval = 1000, .fn = mcu_temp_report_1s});
-    sched.add({.interval = 1000, .fn = tc_report_1s});
+    static sys::LegacyTask t_lvgl    ("lvgl",      10,   lvgl_tick_10ms);
+    static sys::LegacyTask t_heartbeat("heartbeat", 100,  heartbeat_100ms);
+    static sys::LegacyTask t_mcu      ("mcu_temp",  1000, mcu_temp_report_1s);
+    static sys::LegacyTask t_tc       ("tc_report", 1000, tc_report_1s);
+    sched.add(t_lvgl);
+    sched.add(t_heartbeat);
+    sched.add(t_mcu);
+    sched.add(t_tc);
 
     // Defense-in-depth §9: start AFTER FETs are driven low, so a mid-init
     // reset still leaves heaters off on the way down and back up.
