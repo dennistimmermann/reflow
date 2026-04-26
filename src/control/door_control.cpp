@@ -1,5 +1,5 @@
 #include "door_control.hpp"
-#include "../sensors/ntc.hpp"
+#include "../system/store.hpp"
 #include <DRV8251.hpp>
 
 namespace control {
@@ -13,7 +13,9 @@ static constexpr float kMotorMaxC = 80.0f;
 void door_init() { motor.begin(); motor.coast(); }
 
 void door_tick() {
-  if (sensors::ntc_celsius() > kMotorMaxC && state != DoorState::CLOSED) {
+  const auto& ntc = sys::store().ntc_door_motor;
+  if (ntc.fresh_within(sys::freshness::kNtcBudgetMs) &&
+      ntc.get() > kMotorMaxC && state != DoorState::CLOSED) {
     motor.coast();
     state = DoorState::FAULT;
   }

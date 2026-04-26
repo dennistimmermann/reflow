@@ -13,8 +13,4 @@ class NtcTask : public sys::Task {
   void on_tick() override;
 };
 
-// Backwards-compat shim — reads from Store. Removed in step 3 once
-// door_control reads the slot directly.
-float ntc_celsius();
-
 }  // namespace sensors

@@ -48,16 +48,4 @@ void ThermocoupleTask::on_tick() {
   rr = (rr + 1) % 3;
 }
 
-TcReading read(TcRole role) {
-  // TODO: honour SensorMap from settings; currently role == physical index.
-  const auto i = static_cast<uint8_t>(role);
-  const auto& slot      = *tc_slots[i];
-  const auto& open_slot = *tc_open_slots[i];
-  return TcReading{
-    slot.get(),
-    open_slot.valid() ? open_slot.get() : false,
-    slot.fresh_within(sys::freshness::kTcBudgetMs),
-  };
-}
-
 }  // namespace sensors

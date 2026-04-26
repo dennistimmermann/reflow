@@ -34,8 +34,4 @@ void NtcTask::on_tick() {
   sys::store().ntc_door_motor.set(c);
 }
 
-float ntc_celsius() {
-  return sys::store().ntc_door_motor.get();
-}
-
 }  // namespace sensors

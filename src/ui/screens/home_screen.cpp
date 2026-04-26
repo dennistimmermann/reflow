@@ -1,5 +1,5 @@
 #include "home_screen.hpp"
-#include "../../sensors/thermocouples.hpp"
+#include "../../system/store.hpp"
 
 namespace ui::screens {
 
@@ -12,12 +12,9 @@ static lv_group_t* group_ = nullptr;
 
 static void refresh_cb(lv_timer_t*) {
   if (!screen_) return;
-  auto t = sensors::read(sensors::TcRole::TOP);
-  auto b = sensors::read(sensors::TcRole::BOTTOM);
-  auto g = sensors::read(sensors::TcRole::TARGET);
-  lv_label_set_text_fmt(lbl_top_, "Top %.0f°C",    t.celsius);
-  lv_label_set_text_fmt(lbl_bot_, "Bot %.0f°C",    b.celsius);
-  lv_label_set_text_fmt(lbl_tgt_, "Target %.0f°C", g.celsius);
+  lv_label_set_text_fmt(lbl_top_, "Top %.0f°C",    sys::store().tc_top.get());
+  lv_label_set_text_fmt(lbl_bot_, "Bot %.0f°C",    sys::store().tc_bottom.get());
+  lv_label_set_text_fmt(lbl_tgt_, "Target %.0f°C", sys::store().tc_target.get());
 }
 
 void home_build(lv_group_t* g) {

@@ -9,7 +9,7 @@
 #include "control/fan_control.hpp"
 #include "control/door_control.hpp"
 #include "control/safety.hpp"
-#include "control/reflow_controller.hpp"
+#include "control/program_controller.hpp"
 #include "ui/ui.hpp"
 
 namespace app {
@@ -17,16 +17,14 @@ namespace app {
 static sys::Scheduler scheduler;
 
 // Periodic tasks — periods in ms. See CLAUDE.md §8 for the table.
-// LegacyTask is a temporary adapter while modules still expose
-// free-function ticks; they will become Task subclasses one by one.
+// Modules that own a Meyers-singleton Task (heater/fan/program) live
+// inside their own TUs; we just take a reference here. Modules still
+// using free-function ticks are wrapped in LegacyTask until they migrate.
 static sys::LegacyTask           t_safety("safety", 100, control::safety_tick);
 static sensors::ThermocoupleTask t_thermocouples;
 static sensors::NtcTask          t_ntc;
-static sys::LegacyTask           t_heater("heater", 100, control::heater_tick);
-static sys::LegacyTask           t_fan   ("fan",    100, control::fan_tick);
-static sys::LegacyTask           t_door  ("door",    50, control::door_tick);
-static sys::LegacyTask           t_reflow("reflow", 250, control::reflow_tick);
-static sys::LegacyTask           t_ui    ("ui",      10, ui::tick);
+static sys::LegacyTask           t_door("door",  50, control::door_tick);
+static sys::LegacyTask           t_ui  ("ui",    10, ui::tick);
 static sys::LoggerDrainTask      t_logger;
 
 void init() {
@@ -35,22 +33,22 @@ void init() {
 
   t_thermocouples.on_init();
   t_ntc.on_init();
+  control::heater_task() .on_init();
+  control::fan_task()    .on_init();
+  control::program_task().on_init();
 
-  control::heater_init();
-  control::fan_init();
   control::door_init();
   control::safety_init();
-  control::reflow_init();
 
   ui::init();
 
   scheduler.add(t_safety);          // highest priority — first
   scheduler.add(t_thermocouples);
   scheduler.add(t_ntc);
-  scheduler.add(t_heater);
-  scheduler.add(t_fan);
+  scheduler.add(control::heater_task());
+  scheduler.add(control::fan_task());
   scheduler.add(t_door);
-  scheduler.add(t_reflow);
+  scheduler.add(control::program_task());
   scheduler.add(t_ui);
   scheduler.add(t_logger);
 }

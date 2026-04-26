@@ -1,9 +1,9 @@
-#include "reflow_profile.hpp"
+#include "thermal_profile.hpp"
 
 namespace control {
 
 // SAC305 lead-free typical profile — ramp / soak / reflow / cool.
-const ReflowProfile kProfileSAC305 = {
+const ThermalProfile kProfileSAC305 = {
   "SAC305",
   {
     { 150.0f, 90,  2.0f },   // ramp to soak
@@ -15,7 +15,7 @@ const ReflowProfile kProfileSAC305 = {
 };
 
 // 63/37 leaded Sn-Pb profile.
-const ReflowProfile kProfileSnPb = {
+const ThermalProfile kProfileSnPb = {
   "Sn63Pb37",
   {
     { 130.0f, 75,  2.0f },
@@ -26,7 +26,7 @@ const ReflowProfile kProfileSnPb = {
   4
 };
 
-float profile_target_at(const ReflowProfile& p, float elapsed_s, bool* done) {
+float profile_target_at(const ThermalProfile& p, float elapsed_s, bool* done) {
   *done = false;
   float t_start = 0.0f;
   float prev_target = 25.0f;
