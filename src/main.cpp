@@ -50,28 +50,52 @@ static uint8_t melody_idx = 0;
 
 static sensors::McuTempTask t_mcu_temp;
 
-static void heartbeat_100ms() {
+// Test-rig periodic hooks. Lambdas would do but Task subclasses give a
+// place for state and the canonical name() that the scheduler logs.
+
+class HeartbeatTask : public sys::Task {
+ public:
+  HeartbeatTask() : sys::Task("heartbeat", 100) {}
+  void on_tick() override {
     static bool led = false;
     led = !led;
     digitalWrite(PIN_USER_LED, led);
-}
+  }
+};
 
-static void mcu_temp_report_1s() {
+class McuLogTask : public sys::Task {
+ public:
+  McuLogTask() : sys::Task("mcu_log", 1000) {}
+  void on_tick() override {
     const float c = sys::store().mcu_temp.get();
     Serial.printf("MCU temp: %.1f C\r\n", c);
     if (lbl_mcu_) lv_label_set_text_fmt(lbl_mcu_, "MCU: %.1f C", c);
-}
+  }
+};
 
-static void tc_report_1s() {
+class TcReportTask : public sys::Task {
+ public:
+  TcReportTask() : sys::Task("tc_report", 1000) {}
+  void on_tick() override {
     const auto r0 = tc0.read();
     Serial.printf("TC0: %.2f C [open=%d]\r\n", r0.celsius, r0.open_tc);
     if (lbl_tc_) lv_label_set_text_fmt(lbl_tc_, "TC0: %.1f C", r0.celsius);
-}
+  }
+};
 
-static void lvgl_tick_10ms() {
-    lv_tick_inc(10);
+class LvglTask : public sys::Task {
+ public:
+  LvglTask() : sys::Task("lvgl", 10) {}
+  void on_tick() override {
+    lv_tick_inc(period_ms());
     lv_task_handler();
-}
+  }
+};
+
+static HeartbeatTask t_heartbeat;
+static McuLogTask    t_mcu_log;
+static TcReportTask  t_tc;
+static LvglTask      t_lvgl;
 
 static void build_screen() {
     auto* screen = lv_obj_create(nullptr);
@@ -107,10 +131,6 @@ void setup() {
 
     t_mcu_temp.on_init();
 
-    static sys::LegacyTask t_lvgl    ("lvgl",        10, lvgl_tick_10ms);
-    static sys::LegacyTask t_heartbeat("heartbeat", 100, heartbeat_100ms);
-    static sys::LegacyTask t_mcu_log ("mcu_log",   1000, mcu_temp_report_1s);
-    static sys::LegacyTask t_tc      ("tc_report", 1000, tc_report_1s);
     sched.add(t_lvgl);
     sched.add(t_heartbeat);
     sched.add(t_mcu_temp);

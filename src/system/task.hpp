@@ -49,18 +49,4 @@ class Task {
   uint32_t    state_ = 0;
 };
 
-// Adapter that lets us register a free function as a Task during the
-// migration to the Task-based architecture. Delete this class once every
-// scheduler client is a real Task subclass.
-class LegacyTask : public Task {
- public:
-  LegacyTask(const char* name, uint32_t period_ms, void (*fn)())
-      : Task(name, period_ms), fn_(fn) {}
-
-  void on_tick() override { if (fn_) fn_(); }
-
- private:
-  void (*fn_)();
-};
-
 }  // namespace sys

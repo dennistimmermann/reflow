@@ -6,7 +6,7 @@
 namespace control {
 
 static driver::DRV8251 motor(PIN_MOTOR_IN1, PIN_MOTOR_IN2);
-static DoorState state = DoorState::CLOSED;
+static DoorState current_ = DoorState::CLOSED;
 
 // Hard limit for the door motor body temperature — refuse to drive above this.
 static constexpr float kMotorMaxC = 80.0f;
@@ -16,7 +16,7 @@ static bool motor_hot() {
   return ntc.fresh_within(sys::freshness::kNtcBudgetMs) && ntc.get() > kMotorMaxC;
 }
 
-void door_init() {
+void DoorTask::on_init() {
   motor.begin();
   motor.coast();
 
@@ -25,22 +25,27 @@ void door_init() {
   // do the talking.
   sys::bus().fault_tripped.subscribe([](const sys::FaultTripped&) {
     if (motor_hot()) return;
-    if (state == DoorState::CLOSED || state == DoorState::CLOSING) {
-      state = DoorState::OPENING;
+    if (current_ == DoorState::CLOSED || current_ == DoorState::CLOSING) {
+      current_ = DoorState::OPENING;
     }
   });
 }
 
-void door_tick() {
-  if (motor_hot() && state != DoorState::CLOSED) {
+void DoorTask::on_tick() {
+  if (motor_hot() && current_ != DoorState::CLOSED) {
     motor.coast();
-    state = DoorState::FAULT;
+    current_ = DoorState::FAULT;
   }
   // TODO: full state machine with stall detection via IPROPI.
 }
 
-void door_request_open()  { if (state == DoorState::CLOSED) state = DoorState::OPENING; }
-void door_request_close() { if (state == DoorState::OPEN)   state = DoorState::CLOSING; }
-DoorState door_state()    { return state; }
+void door_request_open()  { if (current_ == DoorState::CLOSED) current_ = DoorState::OPENING; }
+void door_request_close() { if (current_ == DoorState::OPEN)   current_ = DoorState::CLOSING; }
+DoorState door_state()    { return current_; }
+
+DoorTask& door_task() {
+  static DoorTask instance;
+  return instance;
+}
 
 }  // namespace control

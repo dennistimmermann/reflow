@@ -13,7 +13,7 @@ namespace ui {
 
 static lv_group_t* group_ = nullptr;
 
-void init() {
+void UiTask::on_init() {
   lv_init();
   lv_port_disp_init();
   lv_port_indev_init();
@@ -25,8 +25,8 @@ void init() {
   go_to(Screen::HOME);
 }
 
-void tick() {
-  lv_tick_inc(10);          // matches our scheduler period
+void UiTask::on_tick() {
+  lv_tick_inc(period_ms());
   lv_task_handler();
 }
 
@@ -40,6 +40,11 @@ void go_to(Screen s) {
     case Screen::SETTINGS:     screens::settings_show();     break;
     case Screen::FAULT:        screens::fault_show();        break;
   }
+}
+
+UiTask& ui_task() {
+  static UiTask instance;
+  return instance;
 }
 
 }  // namespace ui
