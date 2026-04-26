@@ -6,6 +6,7 @@
 #include <MAX6675.hpp>
 #include "sensors/mcu_temp.hpp"
 #include "system/scheduler.hpp"
+#include "system/store.hpp"
 #include "system/task.hpp"
 #include "ui/lv_port_disp.hpp"
 
@@ -47,15 +48,16 @@ static const NamedMelody kMelodies[] = {
 static constexpr uint8_t kNumMelodies = sizeof(kMelodies) / sizeof(kMelodies[0]);
 static uint8_t melody_idx = 0;
 
+static sensors::McuTempTask t_mcu_temp;
+
 static void heartbeat_100ms() {
     static bool led = false;
     led = !led;
     digitalWrite(PIN_USER_LED, led);
-    sensors::mcu_temp_update();
 }
 
 static void mcu_temp_report_1s() {
-    const float c = sensors::mcu_temp_celsius();
+    const float c = sys::store().mcu_temp.get();
     Serial.printf("MCU temp: %.1f C\r\n", c);
     if (lbl_mcu_) lv_label_set_text_fmt(lbl_mcu_, "MCU: %.1f C", c);
 }
@@ -103,13 +105,16 @@ void setup() {
     ui::lv_port_disp_init();   // configures SPI1 + DMA1_Channel1 + GC9A01
     build_screen();
 
-    static sys::LegacyTask t_lvgl    ("lvgl",      10,   lvgl_tick_10ms);
-    static sys::LegacyTask t_heartbeat("heartbeat", 100,  heartbeat_100ms);
-    static sys::LegacyTask t_mcu      ("mcu_temp",  1000, mcu_temp_report_1s);
-    static sys::LegacyTask t_tc       ("tc_report", 1000, tc_report_1s);
+    t_mcu_temp.on_init();
+
+    static sys::LegacyTask t_lvgl    ("lvgl",        10, lvgl_tick_10ms);
+    static sys::LegacyTask t_heartbeat("heartbeat", 100, heartbeat_100ms);
+    static sys::LegacyTask t_mcu_log ("mcu_log",   1000, mcu_temp_report_1s);
+    static sys::LegacyTask t_tc      ("tc_report", 1000, tc_report_1s);
     sched.add(t_lvgl);
     sched.add(t_heartbeat);
-    sched.add(t_mcu);
+    sched.add(t_mcu_temp);
+    sched.add(t_mcu_log);
     sched.add(t_tc);
 
     // Defense-in-depth §9: start AFTER FETs are driven low, so a mid-init
